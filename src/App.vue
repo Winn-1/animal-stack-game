@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import type { CSSProperties } from 'vue'
 
 // 图片样式配置
@@ -180,6 +180,8 @@ const handleAnimalClick = (animal: ClickableAnimal) => {
       const scale = 1 + 0.2 * (1 - progress); // 开始时较大，逐渐恢复正常大小
       const rotation = progress * 360; // 完整旋转一圈
 
+      if (!animalElement) return;
+      
       animalElement.style.transform = `translate(-50%, -50%) scale(${scale}) rotate(${rotation}deg)`;
       animalElement.style.left = `${currentX}px`;
       animalElement.style.top = `${currentY}px`;
@@ -188,7 +190,9 @@ const handleAnimalClick = (animal: ClickableAnimal) => {
         requestAnimationFrame(animate);
       } else {
         // 动画结束，重置变换
-        animalElement.style.transform = 'translate(-50%, -50%)';
+if (animalElement) {
+  animalElement.style.transform = 'translate(-50%, -50%)';
+}
       }
     }
 
@@ -455,6 +459,8 @@ const endGame = (reason: 'timeout' | 'full' | 'win') => {
 }
 
 // 组件卸载时清理计时器
+import { onUnmounted } from 'vue'
+
 onUnmounted(() => {
   if (timer.value) {
     clearInterval(timer.value)
