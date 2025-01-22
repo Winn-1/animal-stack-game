@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
+import type { CSSProperties } from 'vue'
 
 // 图片样式配置
-const animalImageStyle = {
+const animalImageStyle: CSSProperties = {
   width: '100%',
   height: '100%',
   objectFit: 'contain',
@@ -19,7 +20,7 @@ const showConfirmDialog = ref(false)
 const isPaused = ref(false) // 游戏暂停状态
 
 // 待消除区域（最多6个格子）
-const pendingArea = ref<Array<{ id: number; type: string }>>([]);
+const pendingArea = ref<Array<{ id: number; type: string; visible?: boolean }>>([]);
 
 // 动物类型和图片路径
 const animalTypes = ['sheep', 'goose', 'chicken', 'chick', 'cow', 'goat', 'brown_goat', 'donkey', 'horse']
@@ -36,7 +37,18 @@ const animalImages = {
 }
 
 // 游戏区域的动物
-const animals = ref<Array<{ id: number; type: string; x: number; y: number; visible: boolean; zIndex: number; offsetX?: number; offsetY?: number }>>([]);
+interface Animal {
+  id: number;
+  type: string;
+  x: number;
+  y: number;
+  visible: boolean;
+  zIndex: number;
+  offsetX?: number;
+  offsetY?: number;
+}
+
+const animals = ref<Animal[]>([]);
 
 // 检查动物是否被遮挡
 const isAnimalCovered = (targetAnimal: { x: number; y: number; zIndex: number }) => {
@@ -88,7 +100,7 @@ const calculateDistance = (x1: number, y1: number, x2: number, y2: number) => {
 };
 
 // 处理动物的鼠标悬停效果
-const handleAnimalHover = (targetAnimal: { x: number; y: number; id: number }) => {
+const handleAnimalHover = (targetAnimal: { x: number; y: number; id: number; visible?: boolean }) => {
   const INFLUENCE_RADIUS = 15; // 影响半径（百分比）
   const MAX_OFFSET = 3; // 最大位移（百分比）
 
@@ -117,7 +129,13 @@ const resetAnimalOffsets = () => {
   });
 };
 
-const handleAnimalClick = (animal: { id: number; type: string }) => {
+interface ClickableAnimal {
+  id: number;
+  type: string;
+  visible?: boolean;
+}
+
+const handleAnimalClick = (animal: ClickableAnimal) => {
   if (!animal.visible || pendingArea.value.length >= 6 || isPaused.value) return;
   
   // 获取目标动物
@@ -131,7 +149,7 @@ const handleAnimalClick = (animal: { id: number; type: string }) => {
   const emptySlotIndex = pendingArea.value.length;
   const targetSlot = document.querySelector(`.pending-slot:nth-child(${emptySlotIndex + 1})`);
   const targetRect = targetSlot?.getBoundingClientRect();
-  const animalElement = document.querySelector(`[data-animal-id="${animal.id}"]`);
+  const animalElement = document.querySelector(`[data-animal-id="${animal.id}"]`) as HTMLElement | null;
   
   if (targetRect && animalElement) {
     const startRect = animalElement.getBoundingClientRect();
@@ -139,7 +157,6 @@ const handleAnimalClick = (animal: { id: number; type: string }) => {
     const startY = startRect.top;
     const endX = targetRect.left;
     const endY = targetRect.top;
-    const controlPointHeight = 30; // 降低控制点高度到30px
 
     // 设置动画样式
     animalElement.style.position = 'fixed';
@@ -151,7 +168,7 @@ const handleAnimalClick = (animal: { id: number; type: string }) => {
     const startTime = performance.now();
     const duration = 300; // 缩短动画时长到300ms以提升流畅度
 
-    function animate(currentTime) {
+    function animate(currentTime: number) {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
@@ -311,6 +328,15 @@ const startGame = () => {
   }, 1000)
 }
 
+// 检查层级可见性
+const checkLayerVisibility = () => {
+  // 当动物被消除后，检查并更新每个动物的可见性
+  animals.value.forEach(animal => {
+    if (!animal.visible) return;
+    animal.visible = !isAnimalCovered(animal);
+  });
+};
+
 // 初始化游戏
 const initializeGame = () => {
   // 清空现有动物
@@ -318,11 +344,27 @@ const initializeGame = () => {
   pendingArea.value = []
   
   // 计算布局参数
-  const areaSize = {
+  interface AreaSize {
+    width: number;
+    height: number;
+  }
+  interface Margin {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  }
+  interface Position {
+    x: number;
+    y: number;
+    layer: number;
+  }
+
+  const areaSize: AreaSize = {
     width: 70,    // 保持宽度不变
     height: 25    // 保持高度不变
   }
-  const margin = {
+  const margin: Margin = {
     left: 15,     // 保持左边距不变
     top: 35,      // 将上边距从38%减少到35%，使区域整体上移
     right: 85,    // 保持右边界不变
@@ -332,7 +374,7 @@ const initializeGame = () => {
   
   // 生成初始动物布局
   const numAnimalsPerLayer = 18  // 保持每层动物数量不变
-  const positions = []
+  const positions: Position[] = []
   
   // 为每层生成随机位置
   for (let layer = 0; layer < layers; layer++) {
@@ -455,18 +497,18 @@ onUnmounted(() => {
           @mouseleave="resetAnimalOffsets"
           @click="handleAnimalClick(animal)"
         >
-          <img :src="animalImages[animal.type]" :alt="animal.type" :style="animalImageStyle" />
+          <img :src="animalImages[animal.type as keyof typeof animalImages]" :alt="animal.type" :style="animalImageStyle" />
         </div>
       </div>
 
       <div class="pending-area">
         <div
-          v-for="(slot, index) in 6"
+          v-for="index in 6"
           :key="index"
           class="pending-slot"
         >
           <template v-if="pendingArea[index]">
-            <img :src="animalImages[pendingArea[index].type]" :alt="pendingArea[index].type" :style="animalImageStyle" />
+            <img :src="animalImages[pendingArea[index].type as keyof typeof animalImages]" :alt="pendingArea[index].type" :style="animalImageStyle" />
           </template>
         </div>
       </div>
