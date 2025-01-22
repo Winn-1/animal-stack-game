@@ -459,8 +459,6 @@ const endGame = (reason: 'timeout' | 'full' | 'win') => {
 }
 
 // 组件卸载时清理计时器
-import { onUnmounted } from 'vue'
-
 onUnmounted(() => {
   if (timer.value) {
     clearInterval(timer.value)
